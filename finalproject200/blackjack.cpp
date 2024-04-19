@@ -12,5 +12,5 @@ public:
     Card(Rank r, Suit s) : rank(r), suit(s) {}
 
     int getValue() const {
-        return rannk;
+        return rank;
     } 
