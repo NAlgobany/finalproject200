@@ -44,7 +44,7 @@ class Shoe {
 public:
     std::vector<Card> cards;
 
-    Shoe(int numDecks = 6) {
+    Shoe(int numDecks = 6) { 
         for (int i = 0; i < numDecks; ++i) {
             Deck deck;
             deck.shuffle();
