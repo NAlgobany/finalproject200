@@ -22,7 +22,7 @@ private:
 };
 
 class Deck {
-public:
+public
     std::vector<Card> cards;
 
     Deck() {
