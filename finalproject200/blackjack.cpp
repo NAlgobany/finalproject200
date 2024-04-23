@@ -4,6 +4,7 @@
 #include <random>
 #include <ctime>
 #include <map>
+#include <cstdlib>
 
 class Card {
 public:
@@ -43,8 +44,10 @@ public:
 class Shoe {
 public:
     std::vector<Card> cards;
+    static std::mt19937 rng;
 
     Shoe(int numDecks = 6) {
+        rng.seed(static_cast<unsigned int>(std::time(nullptr)));
         for (int i = 0; i < numDecks; ++i) {
             Deck deck;
             deck.shuffle();
@@ -54,12 +57,12 @@ public:
     }
 
     void shuffle() {
-        static std::mt19937 rng(static_cast<unsigned int>(std::time(nullptr)));
         std::shuffle(cards.begin(), cards.end(), rng);
     }
 
     Card dealCard() {
-        if (cards.size() < 100) {
+        if (cards.empty() || cards.size() < 100) {
+            std::cout << "Reshuffling the shoe..." << std::endl;
             shuffle();
         }
         Card card = cards.back();
@@ -86,12 +89,14 @@ public:
             }
         }
         while (totalValue > 21 && aceCount > 0) {
-            totalValue -= 10; 
+            totalValue -= 10; // Convert Ace from 11 to 1
             aceCount--;
         }
         return totalValue;
     }
 };
+
+std::mt19937 Shoe::rng;
 
 class BlackjackGame {
 public:
@@ -109,7 +114,6 @@ public:
             playerHand.addCard(shoe.dealCard());
         }
 
-       
         while (dealerHand.getValue() < 17) {
             dealerHand.addCard(shoe.dealCard());
         }
@@ -121,7 +125,7 @@ public:
             wallet--;
         }
         else if (playerScore == dealerScore) {
-           
+            // draw, no change to wallet
         }
         else {
             wallet++;
@@ -130,17 +134,30 @@ public:
 };
 
 int main() {
+    srand(static_cast<unsigned>(time(nullptr)));  // Seed random number generator
     BlackjackGame game;
-    std::map<std::pair<int, bool>, std::pair<int, int>> results; 
+    std::map<std::pair<int, bool>, std::pair<int, int>> results;
 
     for (int i = 0; i < 100000; ++i) {
-        bool hit = rand() % 2 == 0; 
+        bool hit = rand() % 2 == 0;
         int startingWallet = game.wallet;
         game.playHand(hit);
         int result = game.wallet - startingWallet;
-        int playerStartingValue = game.shoe.cards.back().getValue(); 
+        int playerStartingValue = 10; // Simplified assumption for simulation
 
         if (result > 0) {
-            results[{playerStartingValue, hit}].first++; 
+            results[{playerStartingValue, hit}].first++;
         }
-        else
+        else {
+            results[{playerStartingValue, hit}].second++;
+        }
+    }
+
+    // Output results
+    for (auto& res : results) {
+        std::cout << "Starting Value: " << res.first.first << ", Hit: " << res.first.second
+            << " -> Wins: " << res.second.first << ", Losses: " << res.second.second << std::endl;
+    }
+
+    return 0;
+}
