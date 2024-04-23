@@ -1,213 +1,241 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
-#include <ctime>
-#include <cstdlib>
 #include <random>
+#include <ctime>
+#include <map>
+#include <cctype>
 
 class Card {
 public:
-    char rank;
+    int value;
     char suit;
-
-    Card(char r, char s) : rank(r), suit(s) {}
-
-    int value() const {
-        if (rank >= '2' && rank <= '9') return rank - '0';
-        if (rank == 'T' || rank == 'J' || rank == 'Q' || rank == 'K') return 10;
-        if (rank == 'A') return 11;
-        return 0;
-    }
-
-    void display() const {
-        std::cout << rank << suit << " ";
+    Card(char s, int v) : suit(s), value(v) {}
+    int getValue() const {
+        if (value == 1) return 11;
+        if (value >= 10) return 10;
+        return value;
     }
 };
 
 class Deck {
-private:
-    std::vector<Card> cards;
-    std::mt19937 rng;
-
 public:
-    Deck() : rng(std::random_device()()) {
-        const std::string ranks = "23456789TJQKA";
-        const std::string suits = "SDCH";  // Spades, Diamonds, Clubs, Hearts
-        for (char suit : suits) {
-            for (char rank : ranks) {
-                cards.emplace_back(rank, suit);
+    std::vector<Card> cards;
+    Deck() {
+        const char suits[] = { 'H', 'D', 'C', 'S' };
+        for (char s : suits) {
+            for (int v = 1; v <= 13; v++) {
+                cards.emplace_back(s, v);
             }
         }
-        shuffle();
-    }
-
-    void shuffle() {
-        std::shuffle(cards.begin(), cards.end(), rng);
-    }
-
-    Card deal() {
-        Card card = cards.back();
-        cards.pop_back();
-        return card;
-    }
-
-    bool empty() const {
-        return cards.empty();
     }
 };
 
 class Shoe {
 private:
     std::vector<Card> cards;
-    std::mt19937 rng;
-    int num_decks;
+    int deckCount;
 
-    void refill() {
-        std::cout << "Refilling and shuffling shoe...\n";
-        cards.clear();
-        for (int i = 0; i < num_decks; ++i) {
+public:
+    explicit Shoe(int count) : deckCount(count) {
+        for (int i = 0; i < deckCount; ++i) {
             Deck deck;
-            while (!deck.empty()) {
-                cards.push_back(deck.deal());
-            }
+            cards.insert(cards.end(), deck.cards.begin(), deck.cards.end());
         }
         shuffle();
     }
 
-public:
-    explicit Shoe(int num_decks = 6) : num_decks(num_decks), rng(std::random_device()()) {
-        refill();
-    }
-
     void shuffle() {
-        if (cards.size() < 100) {
-            refill();
+        cards.clear();
+
+        for (int i = 0; i < deckCount; ++i) {
+            Deck deck;
+            cards.insert(cards.end(), deck.cards.begin(), deck.cards.end());
         }
-        else {
-            std::shuffle(cards.begin(), cards.end(), rng);
-        }
+
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(cards.begin(), cards.end(), g);
+
+        std::cout << "Shoe reshuffled with new cards. Total cards: " << cards.size() << std::endl;
     }
 
-    Card deal() {
-        if (cards.size() < 100) {
-            shuffle();
+    Card draw() {
+        if (cards.empty()) {
+            std::cerr << "Cannot draw from an empty shoe." << std::endl;
+
+            return Card('H', 1);
         }
+
         Card card = cards.back();
         cards.pop_back();
+
+        if (cards.size() <= 100) {
+            std::cout << "Card count after draw is " << cards.size() << ". Reshuffling..." << std::endl;
+            shuffle();
+        }
+
         return card;
     }
 
-    size_t size() const {
-        return cards.size();
+
+
+    ~Shoe() {
+        std::cout << "Shoe destroyed. Remaining cards: " << cards.size() << std::endl;
     }
 };
 
-class Hand {
-private:
-    std::vector<Card> cards;
-
-public:
-    void add_card(Card card) {
-        cards.push_back(card);
+int calculateTotal(const std::vector<Card>& cards) {
+    int total = 0;
+    int aceCount = 0;
+    for (const Card& card : cards) {
+        int cardValue = card.getValue();
+        total += cardValue;
+        if (cardValue == 11) aceCount++;
     }
-
-    int compute_value() const {
-        int value = 0;
-        int aces = 0;
-        for (const Card& card : cards) {
-            int card_value = card.value();
-            value += card_value;
-            if (card.rank == 'A') aces++;
-        }
-        while (value > 21 && aces > 0) {
-            value -= 10;
-            aces--;
-        }
-        return value;
+    while (total > 21 && aceCount > 0) {
+        total -= 10;
+        aceCount--;
     }
-
-    void display() const {
-        for (const Card& card : cards) {
-            card.display();
-        }
-        std::cout << " (" << compute_value() << ")" << std::endl;
-    }
-
-    bool is_bust() const {
-        return compute_value() > 21;
-    }
-
-    void clear() {
-        cards.clear();
-    }
-};
+    return total;
+}
 
 class BlackjackGame {
 private:
     Shoe shoe;
+    std::map<std::pair<int, int>, std::map<char, std::vector<int>>> results;
 
 public:
-    BlackjackGame() : shoe(6) {}
+    explicit BlackjackGame() : shoe(6) {}
 
-    void play() {
-        Hand player_hand, dealer_hand;
-        player_hand.add_card(shoe.deal());
-        dealer_hand.add_card(shoe.deal());
-        player_hand.add_card(shoe.deal());
-        dealer_hand.add_card(shoe.deal());
+    void playHand() {
+        std::vector<Card> playerCards = { shoe.draw(), shoe.draw() };
+        std::vector<Card> dealerCards = { shoe.draw(), shoe.draw() };
 
-        std::cout << "Dealer's first card: ";
-        dealer_hand.cards[0].display();
-        std::cout << std::endl;
+        std::cout << "Your cards: " << playerCards[0].getValue() << " and " << playerCards[1].getValue() << std::endl;
+        std::cout << "Dealer's face-up card: " << dealerCards[0].getValue() << std::endl;
 
-        bool player_done = false;
-        while (!player_done) {
-            std::cout << "Your hand: ";
-            player_hand.display();
-            if (player_hand.is_bust()) {
-                std::cout << "Bust! You lose." << std::endl;
-                return;
+        while (true) {
+            std::cout << "Do you want to hit or stand? (h/s): ";
+            char decision;
+            std::cin >> decision;
+            decision = std::tolower(decision);
+            if (decision == 'h') {
+                playerCards.push_back(shoe.draw());
+                std::cout << "You drew a " << playerCards.back().getValue() << std::endl;
+                if (calculateTotal(playerCards) > 21) {
+                    std::cout << "Bust! Your total is over 21.\n";
+                    return;
+                }
             }
-
-            std::cout << "Hit (h) or Stand (s)? ";
-            char choice;
-            std::cin >> choice;
-            if (choice == 'h') {
-                player_hand.add_card(shoe.deal());
+            else if (decision == 's') {
+                break;
             }
             else {
-                player_done = true;
+                std::cout << "Invalid input, please enter 'h' or 's'.\n";
+                continue;
             }
         }
 
-        while (dealer_hand.compute_value() < 17) {
-            dealer_hand.add_card(shoe.deal());
+        int playerTotal = calculateTotal(playerCards);
+        int dealerTotal = calculateTotal(dealerCards);
+
+        while (dealerTotal < 17) {
+            dealerCards.push_back(shoe.draw());
+            dealerTotal = calculateTotal(dealerCards);
         }
 
-        std::cout << "Dealer's hand: ";
-        dealer_hand.display();
+        std::cout << "Dealer's total is " << dealerTotal << std::endl;
 
-        if (dealer_hand.is_bust() or player_hand.compute_value() > dealer_hand.compute_value()) {
-            std::cout << "You win!" << std::endl;
+        if (playerTotal > 21 || (dealerTotal <= 21 && dealerTotal > playerTotal)) {
+            std::cout << "You lose.\n";
         }
-        else if (player_hand.compute_value() < dealer_hand.compute_value()) {
-            std::cout << "You lose." << std::endl;
+        else if (playerTotal == dealerTotal) {
+            std::cout << "It's a draw.\n";
         }
         else {
-            std::cout << "Draw." << std::endl;
+            std::cout << "You win!\n";
+        }
+    }
+
+    void simulateStrategy() {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, 1);
+
+        for (int i = 0; i < 100000; i++) {
+            std::vector<Card> playerCards = { shoe.draw(), shoe.draw() };
+            std::vector<Card> dealerCards = { shoe.draw() };
+
+            int initialPlayerTotal = calculateTotal(playerCards);
+            int initialDealerValue = dealerCards.front().getValue();
+
+            char decision = dis(gen) ? 'h' : 's';
+            if (decision == 'h') {
+                playerCards.push_back(shoe.draw());
+            }
+            int finalPlayerTotal = calculateTotal(playerCards);
+            dealerCards.push_back(shoe.draw());
+            while (calculateTotal(dealerCards) < 17) {
+                dealerCards.push_back(shoe.draw());
+            }
+            int finalDealerTotal = calculateTotal(dealerCards);
+
+            int outcome = 0;
+            if ((finalPlayerTotal > 21) || (finalPlayerTotal < finalDealerTotal && finalDealerTotal <= 21)) {
+                outcome = -1;
+            }
+            else if (finalPlayerTotal == finalDealerTotal) {
+                outcome = 0;
+            }
+            else if (finalPlayerTotal <= 21 && (finalPlayerTotal > finalDealerTotal || finalDealerTotal > 21)) {
+                outcome = 1;
+            }
+
+            results[{initialPlayerTotal, initialDealerValue}][decision].push_back(outcome);
+        }
+    }
+
+    void printResults() {
+        for (auto& kv : results) {
+            for (auto& inner_kv : kv.second) {
+                int wins = std::count(inner_kv.second.begin(), inner_kv.second.end(), 1);
+                int losses = std::count(inner_kv.second.begin(), inner_kv.second.end(), -1);
+                int draws = std::count(inner_kv.second.begin(), inner_kv.second.end(), 0);
+                std::cout << "Player: " << kv.first.first << ", Dealer: " << kv.first.second
+                    << ", Decision: " << inner_kv.first << " -> Wins: " << wins
+                    << ", Losses: " << losses << ", Draws: " << draws << std::endl;
+            }
+        }
+    }
+
+    void menu() {
+        while (true) {
+            std::cout << "Do you want to (1) play a hand, (2) simulate strategy, or (3) exit? ";
+            int choice;
+            std::cin >> choice;
+
+            if (choice == 1) {
+                playHand();
+            }
+            else if (choice == 2) {
+                simulateStrategy();
+                printResults();
+                break;
+            }
+            else if (choice == 3) {
+                break;
+            }
+            else {
+                std::cout << "Invalid choice. Please enter 1, 2, or 3.\n";
+            }
         }
     }
 };
 
 int main() {
-    srand(time(NULL));
     BlackjackGame game;
-    char playAgain = 'y';
-    while (playAgain == 'y') {
-        game.play();
-        std::cout << "Play another hand? (y/n): ";
-        std::cin >> playAgain;
-    }
+    game.menu();
 
     return 0;
 }
